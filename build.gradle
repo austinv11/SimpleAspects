@@ -1,0 +1,16 @@
+group 'com.austinv11'
+version '1.0-SNAPSHOT'
+
+apply plugin: 'java'
+
+sourceCompatibility = 1.8
+
+repositories {
+    jcenter()
+}
+
+dependencies {
+    compile 'net.bytebuddy:byte-buddy:1.7.5' //We could use a lower-level lib, but that will be more error prone
+
+    testCompile group: 'junit', name: 'junit', version: '4.12'
+}
