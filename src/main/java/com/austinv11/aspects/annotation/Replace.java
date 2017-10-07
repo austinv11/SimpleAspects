@@ -12,12 +12,15 @@ import java.lang.annotation.*;
  * contained in the class. Additionally, placing the annotation at the package-level will apply this annotation to all
  * methods contained in the current package.
  *
+ * <b>Warning:</b> This annotation should not be used in its current state, it should be inherited by another. This
+ * prevents clashes.
+ *
  * @see com.austinv11.aspects.inject.Pointcut
  * @see com.austinv11.aspects.inject.AspectInjector
  */
 @Documented
 @Inherited
 @Retention(RetentionPolicy.RUNTIME)
-@Target({ElementType.METHOD, ElementType.TYPE, ElementType.PACKAGE})
+@Target({ElementType.METHOD, ElementType.TYPE})
 public @interface Replace {
 }

@@ -12,6 +12,9 @@ import java.lang.annotation.*;
  * annotation will only have an effect on parameters. However, placing it at the method or constructor level will apply
  * this annotation to all parameters contained in the method/constructor.
  *
+ * <b>Warning:</b> This annotation should not be used in its current state, it should be inherited by another. This
+ * prevents clashes.
+ *
  * @see com.austinv11.aspects.inject.Pointcut
  * @see com.austinv11.aspects.inject.AspectInjector
  */

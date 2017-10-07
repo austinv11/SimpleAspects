@@ -12,5 +12,7 @@ repositories {
 dependencies {
     compile 'net.bytebuddy:byte-buddy:1.7.5' //We could use a lower-level lib, but that will be more error prone
 
+    testCompile 'net.bytebuddy:byte-buddy-agent:1.7.5'
+
     testCompile group: 'junit', name: 'junit', version: '4.12'
 }
