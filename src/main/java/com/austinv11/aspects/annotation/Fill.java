@@ -10,6 +10,7 @@ import java.lang.annotation.*;
  *
  * @see com.austinv11.aspects.inject.AspectInjector
  */
+@Aspect
 @Documented
 @Inherited
 @Retention(RetentionPolicy.RUNTIME)

@@ -1,8 +1,9 @@
 package com.austinv11.aspects.inject;
 
+import com.austinv11.aspects.annotation.Aspect;
 import com.austinv11.aspects.annotation.Before;
 import com.austinv11.aspects.bridge.ExecutionSignal;
-import com.austinv11.aspects.hook.BeforeHook;
+import com.austinv11.aspects.hook.Hook;
 import net.bytebuddy.agent.builder.AgentBuilder;
 import net.bytebuddy.implementation.MethodDelegation;
 import net.bytebuddy.implementation.bind.annotation.*;
@@ -10,7 +11,10 @@ import net.bytebuddy.matcher.ElementMatchers;
 
 import java.io.File;
 import java.io.IOException;
+import java.lang.annotation.Annotation;
 import java.lang.instrument.Instrumentation;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.Callable;
 
 public class AspectInjector {
@@ -34,25 +38,61 @@ public class AspectInjector {
             buddy.enableUnsafeBootstrapInjection().installOnByteBuddyAgent();
     }
 
-    public <T> AspectInjector connect(Class<? extends Before> clazz, BeforeHook hook) {
+    /**
+     * Gets all the annotation types this annotation represents by checking for the hierarchy defined by the
+     * {@link Aspect} meta annotation.
+     *
+     * @param progress A mutable list to track scanning progress, this ensures that infinite recursion doesn't occur.
+     * @param annotation The annotation to get the inheritance of.
+     * @return The inheritance list (including the original passed in annotation).
+     */
+    private List<Class<? extends Annotation>> getInheritanceList(List<Class<? extends Annotation>> progress, Class<? extends Annotation> annotation) {
+        if (progress == null) {
+            Annotation[] annotations = annotation.getAnnotations();
+            List<Class<? extends Annotation>> inherited = new ArrayList<>();
+            for (Annotation annotation1 : annotations) {
+                List<Class<? extends Annotation>> inheritance = getInheritanceList(new ArrayList<>(), annotation1.annotationType());
+                if (!inheritance.isEmpty()) {
+                    inherited.add(annotation1.annotationType());
+                    inherited.addAll(inheritance);
+                }
+            }
+
+            inherited.add(annotation);
+
+            return inherited;
+        }
+
+        List<Class<? extends Annotation>> annotations = new ArrayList<>();
+        for (Annotation annotation1 : annotation.getAnnotations()) {
+            if (!annotation1.annotationType().equals(annotation) && !(progress.contains(annotation1.annotationType()))) {
+                progress.add(annotation1.annotationType());
+                List<Class<? extends Annotation>> found = getInheritanceList(progress, annotation1.annotationType());
+
+                if (found.isEmpty())
+                    continue;
+
+                annotations.addAll(found);
+            }
+        }
+
+        if (annotation.isAnnotationPresent(Aspect.class))
+            annotations.add(annotation);
+        return annotations;
+    }
+
+    private AspectInjector connectMethod(Class<? extends Annotation> clazz, Interceptor interceptor) {
         buddy = buddy.type(ElementMatchers.isAnnotatedWith(clazz))
-                .transform((builder, typeDescription, classLoader, module) -> builder.method(ElementMatchers.any()).intercept(MethodDelegation.to(new BeforeInterceptor(hook))))
-        .type(ElementMatchers.declaresMethod(ElementMatchers.isAnnotatedWith(clazz)))
-                .transform((builder, typeDescription, classLoader, module) -> builder.method(ElementMatchers.isAnnotatedWith(clazz)).intercept(MethodDelegation.to(new BeforeInterceptor(hook))));
+                .transform((builder, typeDescription, classLoader, module) -> builder.method(ElementMatchers.any()).intercept(MethodDelegation.to(interceptor)))
+                .type(ElementMatchers.declaresMethod(ElementMatchers.isAnnotatedWith(clazz)))
+                .transform((builder, typeDescription, classLoader, module) -> builder.method(ElementMatchers.isAnnotatedWith(clazz)).intercept(MethodDelegation.to(interceptor)))
+                .asDecorator();
         return this;
     }
 
-    public class BeforeInterceptor {
-
-        private final BeforeHook hook;
-
-        private BeforeInterceptor(BeforeHook hook) {
-            this.hook = hook;
-        }
-
-        @RuntimeType
-        public Object intercept(@Origin String clazz, @This Object obj, @SuperCall Callable<Object> zuper, @AllArguments Object[] args) throws Throwable {
-            ExecutionSignal<?> sig = hook.before(clazz, obj, args);
+    public AspectInjector connectBefore(Class<? extends Annotation> clazz, Hook hook) {
+        Interceptor interceptor = new Interceptor((clazz1, obj, zuper, args) -> {
+            ExecutionSignal<?> sig = hook.before(clazz1, obj, args);
             switch (sig.getType()) {
                 case RETURN:
                     return null;
@@ -65,6 +105,37 @@ public class AspectInjector {
                 default:
                     return null;
             }
+        });
+        return connectMethod(clazz, interceptor);
+    }
+
+    public AspectInjector connect(Class<? extends Annotation> clazz, Hook hook) {
+        List<Class<? extends Annotation>> inherited = getInheritanceList(null, clazz);
+
+        if (inherited.contains(Before.class)) {
+            connectBefore(clazz, hook);
         }
+
+        return this;
+    }
+
+    public class Interceptor {
+
+        private final GeneralHook hook;
+
+        private Interceptor(GeneralHook hook) {
+            this.hook = hook;
+        }
+
+        @RuntimeType
+        public Object intercept(@Origin String clazz, @This Object obj, @SuperCall Callable<Object> zuper, @AllArguments Object[] args) throws Throwable {
+            return hook.intercept(clazz, obj, zuper, args);
+        }
+    }
+
+    @FunctionalInterface
+    interface GeneralHook {
+
+        Object intercept(String clazz, Object obj, Callable<Object> zuper, Object[] args) throws Throwable;
     }
 }
