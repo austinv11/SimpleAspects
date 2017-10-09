@@ -2,7 +2,6 @@ package com.austinv11.aspects;
 
 import com.austinv11.aspects.annotation.Before;
 import com.austinv11.aspects.bridge.ExecutionSignal;
-import com.austinv11.aspects.hook.Hook;
 import com.austinv11.aspects.inject.AspectInjector;
 import net.bytebuddy.agent.ByteBuddyAgent;
 import org.junit.Test;
@@ -19,8 +18,8 @@ public class TestInjector {
 
     @Test
     public void testBefore() throws IOException {
-        getInjector().connect(Before.class, (Hook) (clazz, obj, args) -> ExecutionSignal.returnValue("yes"))
-                .connect(TestAspect.class, (Hook) (clazz, obj, args) -> ExecutionSignal.returnValue("no"))
+        getInjector().connectBefore(Before.class, (clazz, obj, args) -> ExecutionSignal.returnValue("yes"))
+                .connectBefore(TestAspect.class, (clazz, obj, args) -> ExecutionSignal.returnValue("no"))
                 .inject();
         assertEquals(new TestClass().thing(), "yes");
         assertEquals(new TestClass().thing2(), "no");

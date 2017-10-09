@@ -1,8 +1,11 @@
 package com.austinv11.aspects.inject;
 
+import com.austinv11.aspects.annotation.After;
 import com.austinv11.aspects.annotation.Aspect;
 import com.austinv11.aspects.annotation.Before;
+import com.austinv11.aspects.annotation.Wrap;
 import com.austinv11.aspects.bridge.ExecutionSignal;
+import com.austinv11.aspects.hook.BeforeHook;
 import com.austinv11.aspects.hook.Hook;
 import net.bytebuddy.agent.builder.AgentBuilder;
 import net.bytebuddy.implementation.MethodDelegation;
@@ -89,10 +92,41 @@ public class AspectInjector {
                 .asDecorator();
         return this;
     }
+    
+    private AspectInjector connect(Class<? extends Annotation> clazz, Hook hook, Class<? extends Annotation> expectedAspect) {
+        List<Class<? extends Annotation>> inherited = getInheritanceList(null, clazz);
+    
+        if (inherited.isEmpty())
+            throw new RuntimeException("Invalid aspect inheritance!");
+        
+        if (expectedAspect != null && !inherited.contains(expectedAspect))
+            throw new RuntimeException("Expected an aspect of type " + expectedAspect);
+    
+        if (inherited.contains(Before.class) || inherited.contains(After.class) || inherited.contains(Wrap.class))
+            connectMethod(clazz, Interceptor.wrap(hook));
+    
+        return this;
+    }
+    
+    public AspectInjector connect(Class<? extends Annotation> clazz, Hook hook) {
+        return connect(clazz, hook, null);
+    }
+    
+    public AspectInjector connectBefore(Class<? extends Annotation> clazz, BeforeHook hook) {
+        return connect(clazz, hook, Before.class);
+    }
 
-    public AspectInjector connectBefore(Class<? extends Annotation> clazz, Hook hook) {
-        Interceptor interceptor = new Interceptor((clazz1, obj, zuper, args) -> {
-            ExecutionSignal<?> sig = hook.before(clazz1, obj, args);
+    public static class Interceptor {
+
+        private final Hook hook;
+
+        private Interceptor(Hook hook) {
+            this.hook = hook;
+        }
+
+        @RuntimeType
+        public Object intercept(@Origin String clazz, @This Object obj, @SuperCall Callable<Object> zuper, @AllArguments Object[] args) throws Throwable {
+            ExecutionSignal<?> sig = hook.intercept(clazz, obj, zuper, args);
             switch (sig.getType()) {
                 case RETURN:
                     return null;
@@ -105,37 +139,10 @@ public class AspectInjector {
                 default:
                     return null;
             }
-        });
-        return connectMethod(clazz, interceptor);
-    }
-
-    public AspectInjector connect(Class<? extends Annotation> clazz, Hook hook) {
-        List<Class<? extends Annotation>> inherited = getInheritanceList(null, clazz);
-
-        if (inherited.contains(Before.class)) {
-            connectBefore(clazz, hook);
         }
-
-        return this;
-    }
-
-    public class Interceptor {
-
-        private final GeneralHook hook;
-
-        private Interceptor(GeneralHook hook) {
-            this.hook = hook;
+        
+        public static Interceptor wrap(Hook hook) {
+            return new Interceptor(hook);
         }
-
-        @RuntimeType
-        public Object intercept(@Origin String clazz, @This Object obj, @SuperCall Callable<Object> zuper, @AllArguments Object[] args) throws Throwable {
-            return hook.intercept(clazz, obj, zuper, args);
-        }
-    }
-
-    @FunctionalInterface
-    interface GeneralHook {
-
-        Object intercept(String clazz, Object obj, Callable<Object> zuper, Object[] args) throws Throwable;
     }
 }
