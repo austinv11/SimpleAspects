@@ -95,6 +95,15 @@ public class AspectInjector {
         return this;
     }
     
+//    private AspectInjector connectParam(Class<? extends Annotation> clazz, Interceptor interceptor) {
+//        buddy = buddy.type(ElementMatchers.declaresMethod(ElementMatchers.isAnnotatedWith(clazz)))
+//                .transform(((builder, typeDescription, classLoader, module) -> builder.method(ElementMatchers.isAnnotatedWith(clazz)).intercept(MethodDelegation.to(interceptor))))
+//                .type(ElementMatchers.declaresMethod(ElementMatchers.any()))
+//                .transform(((builder, typeDescription, classLoader, module) -> builder.constructor(ElementMatchers.hasParameters(ElementMatchers.hasAnnotation(Ee)))))
+//                .asDecorator();
+//        return this;
+//    }
+    
     private AspectInjector connect(Class<? extends Annotation> clazz, Hook hook, Class<? extends Annotation> expectedAspect) {
         List<Class<? extends Annotation>> inherited = getInheritanceList(null, clazz);
     
@@ -134,16 +143,18 @@ public class AspectInjector {
             this.hook = hook;
         }
 
+        @BindingPriority(BindingPriority.DEFAULT * 2)
         @RuntimeType
-        public Object intercept(@Origin String clazz, @This Object obj, @SuperCall Callable<Object> zuper, @AllArguments Object[] args) throws Throwable {
-            ExecutionSignal<?> sig = hook.intercept(clazz, obj, zuper, args);
+        public Object intercept(@Origin String clazz, @This(optional = true) Object obj, 
+                                @SuperCall(nullIfImpossible = true) Callable<Object> zuper, @AllArguments Object[] args) throws Throwable {
+            ExecutionSignal<?> sig = hook.intercept(clazz, obj, zuper == null ? () -> null : zuper, args);
             switch (sig.getType()) {
                 case RETURN:
                     return null;
                 case RETURN_VALUE:
                     return sig.getReturnValue();
                 case PASS:
-                    return zuper.call();
+                    return zuper != null ? zuper.call() : null;
                 case THROW:
                     throw sig.getThrowable();
                 default:
