@@ -5,8 +5,10 @@ import com.austinv11.aspects.annotation.Aspect;
 import com.austinv11.aspects.annotation.Before;
 import com.austinv11.aspects.annotation.Wrap;
 import com.austinv11.aspects.bridge.ExecutionSignal;
+import com.austinv11.aspects.hook.AfterHook;
 import com.austinv11.aspects.hook.BeforeHook;
 import com.austinv11.aspects.hook.Hook;
+import com.austinv11.aspects.hook.WrapHook;
 import net.bytebuddy.agent.builder.AgentBuilder;
 import net.bytebuddy.implementation.MethodDelegation;
 import net.bytebuddy.implementation.bind.annotation.*;
@@ -114,6 +116,14 @@ public class AspectInjector {
     
     public AspectInjector connectBefore(Class<? extends Annotation> clazz, BeforeHook hook) {
         return connect(clazz, hook, Before.class);
+    }
+    
+    public AspectInjector connectAfter(Class<? extends Annotation> clazz, AfterHook hook) {
+        return connect(clazz, hook, After.class);
+    }
+    
+    public AspectInjector connectAround(Class<? extends Annotation> clazz, WrapHook hook) {
+        return connect(clazz, hook, Wrap.class);
     }
 
     public static class Interceptor {
