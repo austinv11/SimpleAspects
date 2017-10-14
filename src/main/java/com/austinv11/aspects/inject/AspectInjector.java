@@ -1,14 +1,8 @@
 package com.austinv11.aspects.inject;
 
-import com.austinv11.aspects.annotation.After;
-import com.austinv11.aspects.annotation.Aspect;
-import com.austinv11.aspects.annotation.Before;
-import com.austinv11.aspects.annotation.Wrap;
+import com.austinv11.aspects.annotation.*;
 import com.austinv11.aspects.bridge.ExecutionSignal;
-import com.austinv11.aspects.hook.AfterHook;
-import com.austinv11.aspects.hook.BeforeHook;
-import com.austinv11.aspects.hook.Hook;
-import com.austinv11.aspects.hook.WrapHook;
+import com.austinv11.aspects.hook.*;
 import net.bytebuddy.agent.builder.AgentBuilder;
 import net.bytebuddy.implementation.MethodDelegation;
 import net.bytebuddy.implementation.bind.annotation.*;
@@ -18,6 +12,9 @@ import java.io.File;
 import java.io.IOException;
 import java.lang.annotation.Annotation;
 import java.lang.instrument.Instrumentation;
+import java.lang.reflect.AnnotatedType;
+import java.lang.reflect.Executable;
+import java.lang.reflect.Parameter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Callable;
@@ -95,16 +92,19 @@ public class AspectInjector {
         return this;
     }
     
-//    private AspectInjector connectParam(Class<? extends Annotation> clazz, Interceptor interceptor) {
-//        buddy = buddy.type(ElementMatchers.declaresMethod(ElementMatchers.isAnnotatedWith(clazz)))
-//                .transform(((builder, typeDescription, classLoader, module) -> builder.method(ElementMatchers.isAnnotatedWith(clazz)).intercept(MethodDelegation.to(interceptor))))
-//                .type(ElementMatchers.declaresMethod(ElementMatchers.any()))
-//                .transform(((builder, typeDescription, classLoader, module) -> builder.constructor(ElementMatchers.hasParameters(ElementMatchers.hasAnnotation(Ee)))))
-//                .asDecorator();
-//        return this;
-//    }
+    private AspectInjector connectParam(Class<? extends Annotation> clazz, Interceptor interceptor) {
+        buddy = buddy.type(ElementMatchers.declaresMethod(ElementMatchers.isAnnotatedWith(clazz)))
+                .transform(((builder, typeDescription, classLoader, module) -> builder.method(ElementMatchers.isAnnotatedWith(clazz)).intercept(MethodDelegation.to(interceptor))))
+                .type(ElementMatchers.declaresMethod(ElementMatchers.any()))
+                .transform(((builder, typeDescription, classLoader, module) -> builder.constructor(ElementMatchers.hasParameters(ElementMatchers.whereAny(ElementMatchers.isAnnotatedWith(clazz))))
+                    .intercept(MethodDelegation.to(interceptor))
+                    .method(ElementMatchers.hasParameters(ElementMatchers.whereAny(ElementMatchers.isAnnotatedWith(clazz))).and(ElementMatchers.not(ElementMatchers.isConstructor())))
+                    .intercept(MethodDelegation.to(interceptor))))
+                .asDecorator();
+        return this;
+    }
     
-    private AspectInjector connect(Class<? extends Annotation> clazz, Hook hook, Class<? extends Annotation> expectedAspect) {
+    private AspectInjector connect(Class<? extends Annotation> clazz, InvocationHook hook, Class<? extends Annotation> expectedAspect) {
         List<Class<? extends Annotation>> inherited = getInheritanceList(null, clazz);
     
         if (inherited.isEmpty())
@@ -113,16 +113,13 @@ public class AspectInjector {
         if (expectedAspect != null && !inherited.contains(expectedAspect))
             throw new RuntimeException("Expected an aspect of type " + expectedAspect);
     
-        if (inherited.contains(Before.class) || inherited.contains(After.class) || inherited.contains(Wrap.class))
-            connectMethod(clazz, Interceptor.wrap(hook));
-    
+        if (inherited.contains(Before.class) || inherited.contains(After.class) || inherited.contains(Wrap.class)
+                || inherited.contains(Init.class) || inherited.contains(Replace.class))
+            connectMethod(clazz, Interceptor.wrap(hook, clazz));
+
         return this;
     }
-    
-    public AspectInjector connect(Class<? extends Annotation> clazz, Hook hook) {
-        return connect(clazz, hook, null);
-    }
-    
+
     public AspectInjector connectBefore(Class<? extends Annotation> clazz, BeforeHook hook) {
         return connect(clazz, hook, Before.class);
     }
@@ -135,35 +132,51 @@ public class AspectInjector {
         return connect(clazz, hook, Wrap.class);
     }
 
+    public AspectInjector connectConstructor(Class<? extends Annotation> clazz, InitHook hook) {
+        return connect(clazz, hook, Init.class);
+    }
+
+    public AspectInjector connectReplacement(Class<? extends Annotation> clazz, InvocationHook hook) { //Using the default hook b/c there is no special logic
+        return connect(clazz, hook, Replace.class);
+    }
+
     public static class Interceptor {
 
-        private final Hook hook;
+        private final InvocationHook invocationHook;
+        private final Class<? extends Annotation> annotation;
 
-        private Interceptor(Hook hook) {
-            this.hook = hook;
+        private Interceptor(InvocationHook hook, Class<? extends Annotation> annotation) {
+            this.invocationHook = hook;
+            this.annotation = annotation;
         }
 
         @BindingPriority(BindingPriority.DEFAULT * 2)
         @RuntimeType
-        public Object intercept(@Origin String clazz, @This(optional = true) Object obj, 
-                                @SuperCall(nullIfImpossible = true) Callable<Object> zuper, @AllArguments Object[] args) throws Throwable {
-            ExecutionSignal<?> sig = hook.intercept(clazz, obj, zuper == null ? () -> null : zuper, args);
-            switch (sig.getType()) {
-                case RETURN:
-                    return null;
-                case RETURN_VALUE:
-                    return sig.getReturnValue();
-                case PASS:
-                    return zuper != null ? zuper.call() : null;
-                case THROW:
-                    throw sig.getThrowable();
-                default:
-                    return null;
+        public Object intercept(@Origin Executable info, @This(optional = true) Object obj,
+                                @SuperCall(nullIfImpossible = true) Callable<Object> zuper, @AllArguments Object[] args,
+                                @StubValue Object stub) throws Throwable {
+            if (invocationHook != null) {
+                Annotation annotationInstance = info.isAnnotationPresent(annotation) ? info.getDeclaredAnnotation(annotation) : info.getDeclaringClass().getAnnotation(annotation);
+                ExecutionSignal<?> sig = invocationHook.intercept(info, annotationInstance, obj, zuper == null ? () -> null : zuper, args);
+                switch (sig.getType()) {
+                    case RETURN:
+                        return stub;
+                    case RETURN_VALUE:
+                        return sig.getReturnValue();
+                    case PASS:
+                        return zuper != null ? zuper.call() : null;
+                    case THROW:
+                        throw sig.getThrowable();
+                    default:
+                        return stub;
+                }
+            } else {
+                throw new RuntimeException("No valid hook!");
             }
         }
         
-        public static Interceptor wrap(Hook hook) {
-            return new Interceptor(hook);
+        public static Interceptor wrap(InvocationHook hook, Class<? extends Annotation> annotation) {
+            return new Interceptor(hook, annotation);
         }
     }
 }

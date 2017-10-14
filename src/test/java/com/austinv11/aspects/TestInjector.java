@@ -18,8 +18,8 @@ public class TestInjector {
 
     @Test
     public void testBefore() throws IOException {
-        getInjector().connectBefore(Before.class, (clazz, obj, args) -> ExecutionSignal.returnValue("yes"))
-                .connectBefore(TestAspect.class, (clazz, obj, args) -> ExecutionSignal.returnValue("no"))
+        getInjector().connectBefore(Before.class, (origin, annotation, obj, args) -> ExecutionSignal.returnValue("yes"))
+                .connectBefore(TestAspect.class, (origin, annotation, obj, args) -> ExecutionSignal.returnValue("no"))
                 .inject();
         assertEquals(new TestClass().thing(), "yes");
         assertEquals(new TestClass().thing2(), "no");
