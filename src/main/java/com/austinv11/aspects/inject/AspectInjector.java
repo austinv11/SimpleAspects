@@ -92,17 +92,17 @@ public class AspectInjector {
         return this;
     }
     
-    private AspectInjector connectParam(Class<? extends Annotation> clazz, Interceptor interceptor) {
-        buddy = buddy.type(ElementMatchers.declaresMethod(ElementMatchers.isAnnotatedWith(clazz)))
-                .transform(((builder, typeDescription, classLoader, module) -> builder.method(ElementMatchers.isAnnotatedWith(clazz)).intercept(MethodDelegation.to(interceptor))))
-                .type(ElementMatchers.declaresMethod(ElementMatchers.any()))
-                .transform(((builder, typeDescription, classLoader, module) -> builder.constructor(ElementMatchers.hasParameters(ElementMatchers.whereAny(ElementMatchers.isAnnotatedWith(clazz))))
-                    .intercept(MethodDelegation.to(interceptor))
-                    .method(ElementMatchers.hasParameters(ElementMatchers.whereAny(ElementMatchers.isAnnotatedWith(clazz))).and(ElementMatchers.not(ElementMatchers.isConstructor())))
-                    .intercept(MethodDelegation.to(interceptor))))
-                .asDecorator();
-        return this;
-    }
+//    private AspectInjector connectParam(Class<? extends Annotation> clazz, Interceptor interceptor) {
+//        buddy = buddy.type(ElementMatchers.declaresMethod(ElementMatchers.isAnnotatedWith(clazz)))
+//                .transform(((builder, typeDescription, classLoader, module) -> builder.method(ElementMatchers.isAnnotatedWith(clazz)).intercept(MethodDelegation.to(interceptor))))
+//                .type(ElementMatchers.declaresMethod(ElementMatchers.any()))
+//                .transform(((builder, typeDescription, classLoader, module) -> builder.constructor(ElementMatchers.hasParameters(ElementMatchers.whereAny(ElementMatchers.isAnnotatedWith(clazz))))
+//                    .intercept(MethodDelegation.to(interceptor))
+//                    .method(ElementMatchers.hasParameters(ElementMatchers.whereAny(ElementMatchers.isAnnotatedWith(clazz))).and(ElementMatchers.not(ElementMatchers.isConstructor())))
+//                    .intercept(MethodDelegation.to(interceptor))))
+//                .asDecorator();
+//        return this;
+//    }
     
     private AspectInjector connect(Class<? extends Annotation> clazz, InvocationHook hook, Class<? extends Annotation> expectedAspect) {
         List<Class<? extends Annotation>> inherited = getInheritanceList(null, clazz);
@@ -112,10 +112,8 @@ public class AspectInjector {
         
         if (expectedAspect != null && !inherited.contains(expectedAspect))
             throw new RuntimeException("Expected an aspect of type " + expectedAspect);
-    
-        if (inherited.contains(Before.class) || inherited.contains(After.class) || inherited.contains(Wrap.class)
-                || inherited.contains(Init.class) || inherited.contains(Replace.class))
-            connectMethod(clazz, Interceptor.wrap(hook, clazz));
+
+        connectMethod(clazz, Interceptor.wrap(hook, clazz));
 
         return this;
     }
