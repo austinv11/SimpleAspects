@@ -11,6 +11,8 @@ repositories {
 
 dependencies {
     compile 'net.bytebuddy:byte-buddy:1.7.5' //We could use a lower-level lib, but that will be more error prone
+    compile 'io.github.lukehutch:fast-classpath-scanner:2.8.0'
+
 
     testCompile 'net.bytebuddy:byte-buddy-agent:1.7.5'
 

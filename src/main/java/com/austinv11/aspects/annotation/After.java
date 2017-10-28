@@ -16,7 +16,6 @@ import java.lang.annotation.*;
  *
  * @see Before
  * @see Wrap
- * @see com.austinv11.aspects.inject.Pointcut
  * @see com.austinv11.aspects.inject.AspectInjector
  */
 @Aspect

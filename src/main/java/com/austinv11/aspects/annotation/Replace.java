@@ -14,7 +14,6 @@ import java.lang.annotation.*;
  * <b>Warning:</b> This annotation should not be used in its current state, it should be inherited by another. This
  * prevents clashes.
  *
- * @see com.austinv11.aspects.inject.Pointcut
  * @see com.austinv11.aspects.inject.AspectInjector
  */
 @Aspect

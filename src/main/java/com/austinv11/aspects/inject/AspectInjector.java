@@ -3,6 +3,12 @@ package com.austinv11.aspects.inject;
 import com.austinv11.aspects.annotation.*;
 import com.austinv11.aspects.bridge.ExecutionSignal;
 import com.austinv11.aspects.hook.*;
+import io.github.lukehutch.fastclasspathscanner.FastClasspathScanner;
+import io.github.lukehutch.fastclasspathscanner.matchprocessor.ClassAnnotationMatchProcessor;
+import io.github.lukehutch.fastclasspathscanner.scanner.ClassInfo;
+import io.github.lukehutch.fastclasspathscanner.scanner.FieldInfo;
+import io.github.lukehutch.fastclasspathscanner.scanner.MethodInfo;
+import io.github.lukehutch.fastclasspathscanner.scanner.ScanResult;
 import net.bytebuddy.agent.builder.AgentBuilder;
 import net.bytebuddy.implementation.MethodDelegation;
 import net.bytebuddy.implementation.bind.annotation.*;
@@ -12,21 +18,29 @@ import java.io.File;
 import java.io.IOException;
 import java.lang.annotation.Annotation;
 import java.lang.instrument.Instrumentation;
-import java.lang.reflect.AnnotatedType;
 import java.lang.reflect.Executable;
-import java.lang.reflect.Parameter;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.concurrent.Callable;
+import java.util.*;
+import java.util.concurrent.*;
 
 public class AspectInjector {
 
     private AgentBuilder buddy;
     private final Instrumentation instrumentation;
+    private final List<ClasspathSniffer> sniffers = Collections.synchronizedList(new ArrayList<>());
+    private final boolean classpathScanningEnabled;
 
-    public AspectInjector(Instrumentation instrumentation) {
+    public AspectInjector(Instrumentation instrumentation, boolean classpathScanningEnabled) {
         this.instrumentation = instrumentation;
         this.buddy = new AgentBuilder.Default().with(AgentBuilder.LambdaInstrumentationStrategy.ENABLED);
+        this.classpathScanningEnabled = classpathScanningEnabled;
+    }
+
+    public AspectInjector(Instrumentation instrumentation) {
+        this(instrumentation, true);
+    }
+
+    public AspectInjector(boolean classpathScanningEnabled) {
+        this(null, classpathScanningEnabled);
     }
 
     public AspectInjector() {
@@ -38,6 +52,62 @@ public class AspectInjector {
             buddy.enableBootstrapInjection(instrumentation, File.createTempFile("bootstrap", "temp")).installOn(instrumentation);
         else
             buddy.enableUnsafeBootstrapInjection().installOnByteBuddyAgent();
+
+        if (classpathScanningEnabled)
+            runScan();
+    }
+
+    private void runScan() {
+        ExecutorService executor = Executors.newSingleThreadExecutor(r -> {
+            Thread thread = Executors.defaultThreadFactory().newThread(r);
+            thread.setDaemon(true);
+            thread.setName("SimpleAspects Classpath Scanner");
+            return thread;
+        });
+
+        executor.execute(() -> {
+            FastClasspathScanner scanner = new FastClasspathScanner()
+                    .enableFieldInfo()
+                    .enableFieldAnnotationIndexing()
+                    .enableMethodInfo()
+                    .enableMethodAnnotationIndexing()
+                    .ignoreFieldVisibility()
+                    .ignoreMethodVisibility();
+
+            Map<Class<? extends Annotation>, List<ClasspathSniffer>> classifiedSniffers = new HashMap<>();
+
+            for (ClasspathSniffer sniffer : sniffers) {
+                classifiedSniffers.putIfAbsent(sniffer.getDiscoveryAnnotationType(), new ArrayList<>());
+                classifiedSniffers.get(sniffer.getDiscoveryAnnotationType()).add(sniffer);
+            }
+
+            ScanResult results = scanner.scan();
+            Map<String, ClassInfo> scanned = results.getClassNameToClassInfo();
+
+            classifiedSniffers.forEach((annotation, sniffers) -> {
+                String annotationName = annotation.getCanonicalName();
+
+                scanned.forEach((name, info) -> {
+                    if (info.hasAnnotation(annotationName)) {
+                        sniffers.forEach(sniffer -> sniffer.sniff(name, info, null, null));
+                    }
+                    if (info.hasMethodWithAnnotation(annotationName)) {
+                       info.getMethodInfo()
+                               .stream()
+                               .filter(methodInfo -> methodInfo.getAnnotationNames().contains(annotationName))
+                               .forEach(methodInfo -> sniffers.forEach(sniffer -> sniffer.sniff(name, info, methodInfo, null)));
+                    }
+                    if (info.hasFieldWithAnnotation(annotationName)) {
+                        info.getFieldInfo()
+                                .stream()
+                                .filter(fieldInfo -> fieldInfo.getAnnotationNames().contains(annotationName))
+                                .forEach(fieldInfo -> sniffers.forEach(sniffer -> sniffer.sniff(name, info, null, fieldInfo)));
+                    }
+                });
+            });
+
+            executor.shutdown();
+        });
     }
 
     /**
@@ -103,15 +173,43 @@ public class AspectInjector {
 //                .asDecorator();
 //        return this;
 //    }
-    
-    private AspectInjector connect(Class<? extends Annotation> clazz, InvocationHook hook, Class<? extends Annotation> expectedAspect) {
+
+    private void precheckAspectInfo(Class<? extends Annotation> clazz, Class<? extends Annotation> expectedAspect) {
         List<Class<? extends Annotation>> inherited = getInheritanceList(null, clazz);
-    
+
         if (inherited.isEmpty())
             throw new RuntimeException("Invalid aspect inheritance!");
-        
+
         if (expectedAspect != null && !inherited.contains(expectedAspect))
             throw new RuntimeException("Expected an aspect of type " + expectedAspect);
+    }
+
+    public AspectInjector discoverClasses(Class<? extends Annotation> clazz, ClassDiscoveryHook hook) {
+        precheckAspectInfo(clazz, Discover.class);
+
+        sniffers.add(ClasspathSniffer.wrap(hook, clazz));
+
+        return this;
+    }
+
+    public AspectInjector discoverMethods(Class<? extends Annotation> clazz, MethodDiscoveryHook hook) {
+        precheckAspectInfo(clazz, Discover.class);
+
+        sniffers.add(ClasspathSniffer.wrap(hook, clazz));
+
+        return this;
+    }
+
+    public AspectInjector discoverFields(Class<? extends Annotation> clazz, FieldDiscoveryHook hook) {
+        precheckAspectInfo(clazz, Discover.class);
+
+        sniffers.add(ClasspathSniffer.wrap(hook, clazz));
+
+        return this;
+    }
+    
+    private AspectInjector connect(Class<? extends Annotation> clazz, InvocationHook hook, Class<? extends Annotation> expectedAspect) {
+        precheckAspectInfo(clazz, expectedAspect);
 
         connectMethod(clazz, Interceptor.wrap(hook, clazz));
 
@@ -175,6 +273,47 @@ public class AspectInjector {
         
         public static Interceptor wrap(InvocationHook hook, Class<? extends Annotation> annotation) {
             return new Interceptor(hook, annotation);
+        }
+    }
+
+    public static class ClasspathSniffer {
+
+        private final ClassDiscoveryHook classHook;
+        private final MethodDiscoveryHook methodHook;
+        private final FieldDiscoveryHook fieldHook;
+        private final Class<? extends Annotation> annotation;
+
+        private ClasspathSniffer(ClassDiscoveryHook classHook, MethodDiscoveryHook methodHook, FieldDiscoveryHook fieldHook, Class<? extends Annotation> annotation) {
+            this.classHook = classHook;
+            this.methodHook = methodHook;
+            this.fieldHook = fieldHook;
+            this.annotation = annotation;
+        }
+
+        private void sniff(String name, ClassInfo classInfo, MethodInfo methodInfo, FieldInfo fieldInfo) {
+            if (classHook != null && methodInfo == null && fieldInfo == null) {
+                classHook.onDiscover(name, classInfo);
+            } else if (methodHook != null && methodInfo != null) {
+                methodHook.onDiscover(name, classInfo, methodInfo);
+            } else if (fieldHook != null && fieldInfo != null) {
+                fieldHook.onDiscover(name, classInfo, fieldInfo);
+            }
+        }
+
+        private Class<? extends Annotation> getDiscoveryAnnotationType() {
+            return annotation;
+        }
+
+        public static ClasspathSniffer wrap(ClassDiscoveryHook hook, Class<? extends Annotation> annotation) {
+            return new ClasspathSniffer(hook, null, null, annotation);
+        }
+
+        public static ClasspathSniffer wrap(MethodDiscoveryHook hook, Class<? extends Annotation> annotation) {
+            return new ClasspathSniffer(null, hook, null, annotation);
+        }
+
+        public static ClasspathSniffer wrap(FieldDiscoveryHook hook, Class<? extends Annotation> annotation) {
+            return new ClasspathSniffer(null, null, hook, annotation);
         }
     }
 }
