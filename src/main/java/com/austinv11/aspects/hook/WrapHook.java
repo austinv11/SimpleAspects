@@ -6,6 +6,14 @@ import java.lang.annotation.Annotation;
 import java.lang.reflect.Executable;
 import java.util.concurrent.Callable;
 
+/**
+ * This represents a hook called before and after execution of a method.
+ *
+ * This corresponds to the {@link com.austinv11.aspects.annotation.Wrap} annotation.
+ *
+ * @see BeforeHook
+ * @see AfterHook
+ */
 public interface WrapHook extends BeforeHook, AfterHook {
     
     @Override

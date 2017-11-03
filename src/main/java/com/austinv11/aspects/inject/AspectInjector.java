@@ -4,7 +4,6 @@ import com.austinv11.aspects.annotation.*;
 import com.austinv11.aspects.bridge.ExecutionSignal;
 import com.austinv11.aspects.hook.*;
 import io.github.lukehutch.fastclasspathscanner.FastClasspathScanner;
-import io.github.lukehutch.fastclasspathscanner.matchprocessor.ClassAnnotationMatchProcessor;
 import io.github.lukehutch.fastclasspathscanner.scanner.ClassInfo;
 import io.github.lukehutch.fastclasspathscanner.scanner.FieldInfo;
 import io.github.lukehutch.fastclasspathscanner.scanner.MethodInfo;
@@ -22,6 +21,9 @@ import java.lang.reflect.Executable;
 import java.util.*;
 import java.util.concurrent.*;
 
+/**
+ * This class wires all aspects and performs injections.
+ */
 public class AspectInjector {
 
     private AgentBuilder buddy;
@@ -29,24 +31,50 @@ public class AspectInjector {
     private final List<ClasspathSniffer> sniffers = Collections.synchronizedList(new ArrayList<>());
     private final boolean classpathScanningEnabled;
 
+    /**
+     * Constructs a new injector.
+     *
+     * @param instrumentation The instrumentation instance used to perform the bytecode injection with.
+     * @param classpathScanningEnabled This is used to toggle classpath scanning because it will add some overhead on
+     *                                 injection.
+     */
     public AspectInjector(Instrumentation instrumentation, boolean classpathScanningEnabled) {
         this.instrumentation = instrumentation;
         this.buddy = new AgentBuilder.Default().with(AgentBuilder.LambdaInstrumentationStrategy.ENABLED);
         this.classpathScanningEnabled = classpathScanningEnabled;
     }
 
+    /**
+     * Constructs a new injector.
+     *
+     * @param instrumentation The instrumentation instance used to perform the bytecode injection with.
+     */
     public AspectInjector(Instrumentation instrumentation) {
         this(instrumentation, true);
     }
 
+    /**
+     * Constructs a new injector.
+     *
+     * @param classpathScanningEnabled This is used to toggle classpath scanning because it will add some overhead on
+     *                                 injection.
+     */
     public AspectInjector(boolean classpathScanningEnabled) {
         this(null, classpathScanningEnabled);
     }
 
+    /**
+     * Constructs a new injector.
+     */
     public AspectInjector() {
         this(null);
     }
 
+    /**
+     * Performs injection with all the aspects currently configured.
+     *
+     * @throws IOException
+     */
     public void inject() throws IOException {
         if (instrumentation != null)
             buddy.enableBootstrapInjection(instrumentation, File.createTempFile("bootstrap", "temp")).installOn(instrumentation);
@@ -184,6 +212,13 @@ public class AspectInjector {
             throw new RuntimeException("Expected an aspect of type " + expectedAspect);
     }
 
+    /**
+     * Register a class discovery hook.
+     *
+     * @param clazz The annotation class to limit search by.
+     * @param hook The hook to call on discovery.
+     * @return The current injector instance to allow for chaining.
+     */
     public AspectInjector discoverClasses(Class<? extends Annotation> clazz, ClassDiscoveryHook hook) {
         precheckAspectInfo(clazz, Discover.class);
 
@@ -192,6 +227,13 @@ public class AspectInjector {
         return this;
     }
 
+    /**
+     * Register a method discovery hook.
+     *
+     * @param clazz The annotation class to limit search by.
+     * @param hook The hook to call on discovery.
+     * @return The current injector instance to allow for chaining.
+     */
     public AspectInjector discoverMethods(Class<? extends Annotation> clazz, MethodDiscoveryHook hook) {
         precheckAspectInfo(clazz, Discover.class);
 
@@ -200,6 +242,13 @@ public class AspectInjector {
         return this;
     }
 
+    /**
+     * Register a field discovery hook.
+     *
+     * @param clazz The annotation class to limit search by.
+     * @param hook The hook to call on discovery.
+     * @return The current injector instance to allow for chaining.
+     */
     public AspectInjector discoverFields(Class<? extends Annotation> clazz, FieldDiscoveryHook hook) {
         precheckAspectInfo(clazz, Discover.class);
 
@@ -216,26 +265,64 @@ public class AspectInjector {
         return this;
     }
 
+    /**
+     * Wires an annotation extending {@link Before} to a corresponding hook.
+     *
+     * @param clazz The annotation to wire to.
+     * @param hook The hook to wire with.
+     * @return The current injector instance to allow for chaining.
+     */
     public AspectInjector connectBefore(Class<? extends Annotation> clazz, BeforeHook hook) {
         return connect(clazz, hook, Before.class);
     }
-    
+
+    /**
+     * Wires an annotation extending {@link After} to a corresponding hook.
+     *
+     * @param clazz The annotation to wire to.
+     * @param hook The hook to wire with.
+     * @return The current injector instance to allow for chaining.
+     */
     public AspectInjector connectAfter(Class<? extends Annotation> clazz, AfterHook hook) {
         return connect(clazz, hook, After.class);
     }
-    
+
+    /**
+     * Wires an annotation extending {@link Wrap} to a corresponding hook.
+     *
+     * @param clazz The annotation to wire to.
+     * @param hook The hook to wire with.
+     * @return The current injector instance to allow for chaining.
+     */
     public AspectInjector connectAround(Class<? extends Annotation> clazz, WrapHook hook) {
         return connect(clazz, hook, Wrap.class);
     }
 
+    /**
+     * Wires an annotation extending {@link Init} to a corresponding hook.
+     *
+     * @param clazz The annotation to wire to.
+     * @param hook The hook to wire with.
+     * @return The current injector instance to allow for chaining.
+     */
     public AspectInjector connectConstructor(Class<? extends Annotation> clazz, InitHook hook) {
         return connect(clazz, hook, Init.class);
     }
 
+    /**
+     * Wires an annotation extending {@link Replace} to a corresponding hook.
+     *
+     * @param clazz The annotation to wire to.
+     * @param hook The hook to wire with.
+     * @return The current injector instance to allow for chaining.
+     */
     public AspectInjector connectReplacement(Class<? extends Annotation> clazz, InvocationHook hook) { //Using the default hook b/c there is no special logic
         return connect(clazz, hook, Replace.class);
     }
 
+    /**
+     * Internal class used for performing execution interceptions.
+     */
     public static class Interceptor {
 
         private final InvocationHook invocationHook;
@@ -276,6 +363,9 @@ public class AspectInjector {
         }
     }
 
+    /**
+     * Internal class used for performing classpath scanning.
+     */
     public static class ClasspathSniffer {
 
         private final ClassDiscoveryHook classHook;

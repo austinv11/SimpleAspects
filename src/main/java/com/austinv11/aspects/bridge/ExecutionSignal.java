@@ -13,14 +13,29 @@ public final class ExecutionSignal<R> {
     private final R toReturn;
     private final Throwable toThrow;
 
+    /**
+     * This generates a signal representing a return statement with no return value associated with it.
+     *
+     * @return The signal.
+     */
     public static ExecutionSignal<Void> returnVoid() {
         return new ExecutionSignal(SignalType.RETURN, null, null);
     }
 
+    /**
+     * This generates a signal representing a return statement with a return value associated with it.
+     *
+     * @return The signal.
+     */
     public static <R> ExecutionSignal<R> returnValue(R val) {
         return new ExecutionSignal<>(SignalType.RETURN_VALUE, val, null);
     }
 
+    /**
+     * This generates a signal representing an exception throw statement.
+     *
+     * @return The signal.
+     */
     public static ExecutionSignal<Void> throwException(Throwable throwable) {
         return new ExecutionSignal(SignalType.THROW, null, throwable);
     }
@@ -33,6 +48,11 @@ public final class ExecutionSignal<R> {
 //        return new ExecutionSignal(SignalType.CONTINUE, null, null);
 //    }
 
+    /**
+     * This generates a simple pass signal, meaning no side effects will be produced.
+     *
+     * @return The signal.
+     */
     public static ExecutionSignal<Void> pass() {
         return new ExecutionSignal(SignalType.PASS, null, null);
     }
@@ -43,18 +63,36 @@ public final class ExecutionSignal<R> {
         this.toThrow = toThrow;
     }
 
+    /**
+     * Gets the type of signal this represents.
+     *
+     * @return The signal type.
+     */
     public SignalType getType() {
         return type;
     }
 
+    /**
+     * Gets the return value for the signal if such a value exists.
+     *
+     * @return The return value.
+     */
     public R getReturnValue() {
         return toReturn;
     }
 
+    /**
+     * Gets the throwable thrown for the signal if the throwable exists.
+     *
+     * @return The throwable.
+     */
     public Throwable getThrowable() {
         return toThrow;
     }
 
+    /**
+     * This represents all the types of possible signals an {@link ExecutionSignal} object can represent.
+     */
     public enum SignalType {
         RETURN, RETURN_VALUE, PASS, THROW
     }

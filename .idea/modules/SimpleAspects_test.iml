@@ -11,7 +11,7 @@
     <orderEntry type="sourceFolder" forTests="false" />
     <orderEntry type="module" module-name="SimpleAspects_main" />
     <orderEntry type="library" name="Gradle: net.bytebuddy:byte-buddy:1.7.5" level="project" />
-    <orderEntry type="library" name="Gradle: io.github.lukehutch:fast-classpath-scanner:2.8.0" level="project" />
+    <orderEntry type="library" name="Gradle: io.github.lukehutch:fast-classpath-scanner:2.8.1" level="project" />
     <orderEntry type="library" name="Gradle: net.bytebuddy:byte-buddy-agent:1.7.5" level="project" />
     <orderEntry type="library" name="Gradle: junit:junit:4.12" level="project" />
     <orderEntry type="library" name="Gradle: org.hamcrest:hamcrest-core:1.3" level="project" />
