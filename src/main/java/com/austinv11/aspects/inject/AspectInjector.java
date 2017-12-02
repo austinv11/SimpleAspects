@@ -19,6 +19,7 @@ import java.lang.annotation.Annotation;
 import java.lang.instrument.Instrumentation;
 import java.lang.reflect.Executable;
 import java.util.*;
+import java.util.stream.Collectors;
 import java.util.concurrent.*;
 
 /**
@@ -160,7 +161,7 @@ public class AspectInjector {
 
             inherited.add(annotation);
 
-            return inherited;
+            return inherited.stream().distinct().collect(Collectors.toList());
         }
 
         List<Class<? extends Annotation>> annotations = new ArrayList<>();
@@ -178,7 +179,7 @@ public class AspectInjector {
 
         if (annotation.isAnnotationPresent(Aspect.class))
             annotations.add(annotation);
-        return annotations;
+        return annotations.stream().distinct().collect(Collectors.toList());
     }
 
     private AspectInjector connectMethod(Class<? extends Annotation> clazz, Interceptor interceptor) {
