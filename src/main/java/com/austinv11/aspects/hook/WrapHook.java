@@ -30,7 +30,7 @@ public interface WrapHook extends BeforeHook, AfterHook {
         }
         
         
-        ExecutionSignal<?> afterSig = after(origin, aspect, obj, args);
+        ExecutionSignal<?> afterSig = after(origin, aspect, obj, args, orig);
         if (afterSig.getType() == ExecutionSignal.SignalType.PASS)
             return orig;
         else

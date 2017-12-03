@@ -21,11 +21,12 @@ public interface AfterHook extends InvocationHook {
      * @param aspect The annotation corresponding to the hook.
      * @param obj The instance of the object the method is being being invoked for.
      * @param args The arguments for the execution.
+     * @param original The original return value for the method.
      * @return The execution signal representing the results of this overridden invocation.
      *
      * @throws Throwable
      */
-    ExecutionSignal after(Executable origin, Annotation aspect, Object obj, Object[] args) throws Throwable;
+    ExecutionSignal after(Executable origin, Annotation aspect, Object obj, Object[] args, ExecutionSignal original) throws Throwable;
     
     @Override
     default ExecutionSignal intercept(Executable origin, Annotation aspect, Object obj, Callable<Object> zuper, Object[] args) throws Throwable {
@@ -35,7 +36,7 @@ public interface AfterHook extends InvocationHook {
         } catch (Throwable t) {
             orig = ExecutionSignal.throwException(t);
         }
-        ExecutionSignal<?> sig = after(origin, aspect, obj, args);
+        ExecutionSignal<?> sig = after(origin, aspect, obj, args, orig);
         if (sig.getType() == ExecutionSignal.SignalType.PASS)
             return orig;
         else
